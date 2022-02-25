@@ -31,6 +31,7 @@ class ActorNet(nn.Module):
 
     def forward(self, x):
         # x = self.bn_1(x)
+        x = torch.Tensor(x)
         x = self.lin_1(x)
         x = self.bn_2(x)
         x = self.relu_1(x)
@@ -66,6 +67,9 @@ class CriticNet(nn.Module):
     def forward(self, state, action):
 
         # concat = self.bn_1(state)
+        state = torch.Tensor(state)
+        action = torch.Tensor(action)
+
         concat = self.lin_1(state)
         concat = self.bn_2(concat)
         concat = self.relu_1(concat)

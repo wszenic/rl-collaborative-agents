@@ -10,7 +10,7 @@ from unityagents import UnityEnvironment
 from src.agents.maddpg import MADDPGAgent
 from src.config import MAX_EPOCH, GAMMA, TAU, BATCH_SIZE, ACTOR_LEARNING_RATE, \
     CRITIC_LEARNING_RATE, CHECKPOINT_EVERY, ACTOR_SIZE_1, CRITIC_SIZE_2, CRITIC_SIZE_1, ACTOR_SIZE_2, \
-    UNITY_ENV_LOCATION, EPOCHS_WITH_NOISE
+    UNITY_ENV_LOCATION, EPOCHS_WITH_NOISE, BUFFER_SIZE, ALPHA, BETA, NOISE_STD, UPDATE_FREQ
 from src.structs import EnvFeedback
 
 
@@ -25,7 +25,7 @@ def evaluate():
     env, multi_agent, scores, brain_name = setup_environment(read_saved_model=True, no_graphics=False)
 
     env_info = env.reset(train_mode=False)[brain_name]
-    start_state = env_info.vector_observations[0]
+    start_state = env_info.vector_observations
 
     score = act_during_episode(multi_agent, env, start_state, brain_name, use_noise=False)
     print(f"Evaluation score = {score}")
@@ -61,7 +61,7 @@ def train(log: bool):
         episode_time = time.time() - episode_start_time
         print(
             f"Ep: {episode} | Score: {score:.2f} | Max: {np.max(scores):.2f} "
-            f"| Avg: {np.mean(scores[-100:]):.2f} | Time: {episode_time:.0f}")
+            f"| Avg: {np.mean(scores[-100:]):.4f} | Time: {episode_time:.4f}")
 
         if episode % CHECKPOINT_EVERY == 0:
             multi_agent.save()
@@ -104,7 +104,6 @@ def act_during_episode(multi_agent, env, state, brain_name, use_noise):
 
         score += np.max([env_response.reward, env_response.reward])
         state = env_response.next_state
-
         if any(env_response.done):
             break
     return score
@@ -126,7 +125,12 @@ def log_to_neptune():
         'ACTOR_MID_2': ACTOR_SIZE_2,
         'CRITIC_CONCAT_1': CRITIC_SIZE_1,
         'CRITIC_CONCAT_2': CRITIC_SIZE_2,
-        'EPOCHS_WITH_NOISE': EPOCHS_WITH_NOISE
+        'EPOCHS_WITH_NOISE': EPOCHS_WITH_NOISE,
+        'BUFFER_SIZE': BUFFER_SIZE,
+        'ALPHA': ALPHA,
+        'BETA': BETA,
+        'NOISE_STD': NOISE_STD,
+        'UPDATE_FREQ': UPDATE_FREQ
     }
     return neptune_run
 

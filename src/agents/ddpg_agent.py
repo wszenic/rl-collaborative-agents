@@ -1,12 +1,9 @@
-from collections import namedtuple
-
 import numpy as np
 import torch
 from torch import nn
 
-from src.config import BATCH_SIZE, GAMMA, TAU, CHECKPOINT_SAVE_PATH, \
-    NOISE_STD, ACTOR_LEARNING_RATE, ALPHA, BETA, UPDATE_FREQ
-from src.memory.openai import PrioritizedReplayBuffer
+from src.config import TAU, CHECKPOINT_SAVE_PATH, \
+    NOISE_STD, ACTOR_LEARNING_RATE
 from src.network import ActorNet
 from src.noise import OUActionNoise
 from src.structs import EnvFeedback
@@ -19,7 +16,8 @@ def soft_update(local_model, target_model):
 
 class DDPG:
 
-    def __init__(self, state_size: int, action_size: int, critic_network: nn.Module, read_saved_model=False):
+    def __init__(self, state_size: int, action_size: int, critic_network: nn.Module, read_saved_model=False,
+                 agent_id=None):
         self.noise = OUActionNoise(mean=np.zeros(action_size), std_deviation=float(NOISE_STD) * np.ones(action_size))
 
         device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
@@ -32,12 +30,12 @@ class DDPG:
         self.critic_network = critic_network  # in maddpg critic is shared across many agents
 
         if read_saved_model:
-            self.__load_model()
+            self.__load_model(agent_id)
 
         self._step_id = 0
 
-    def __load_model(self):
-        saved_model = torch.load(CHECKPOINT_SAVE_PATH)
+    def __load_model(self, agent_id):
+        saved_model = torch.load(CHECKPOINT_SAVE_PATH.format(agent_id=agent_id))
         self.actor_network_local.load_state_dict(saved_model)
 
     def act(self, state, use_noise: bool):
@@ -56,7 +54,7 @@ class DDPG:
     def learn(self, env_data: EnvFeedback):
         # actor
         actor_actions = self.actor_network_local(env_data.state)
-        critic_value = self.critic_network.critic_local(env_data.state, actor_actions)
+        critic_value = self.critic_network(env_data.state, actor_actions)
         actor_loss = -torch.mean(critic_value)
 
         self.actor_optimizer.zero_grad()
