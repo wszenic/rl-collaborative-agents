@@ -21,7 +21,6 @@ class DDPG:
         self.noise = OUActionNoise(mean=np.zeros(action_size), std_deviation=float(settings.noise_std) * np.ones(action_size))
 
         device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
-        logger.info(f"Device = {device}")
         self.actor_network_local = ActorNet(state_size, action_size).to(device)
         self.actor_network_target = ActorNet(state_size, action_size).to(device)
         self.actor_network_target.load_state_dict(self.actor_network_local.state_dict())

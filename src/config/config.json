@@ -2,7 +2,7 @@
   "unity_env_location": "/users/wojciech.szenic/pycharmprojects/rl-collaborative-agents/unity_env/tennis.app",
   "checkpoint_save_path": "./checkpoints/model_checkpoint_agent_{agent_id}.pth",
   "n_agents": 2,
-  "max_epoch": 6000,
+  "max_epoch": 1000,
   "epochs_with_noise": 0,
   "actor_learning_rate": 1e-3,
   "critic_learning_rate": 1e-3,
@@ -18,5 +18,5 @@
   "alpha": 0.9,
   "beta": 0.9,
   "noise_std": 1,
-  "checkpoint_every": 500
+  "checkpoint_every": 50
 }

@@ -5,7 +5,6 @@ import click
 import neptune.new as neptune
 import numpy as np
 import optuna
-from optuna import trial
 from unityagents import UnityEnvironment
 
 from src.agents.maddpg import MADDPGAgent
@@ -34,7 +33,7 @@ def evaluate():
 @run.command("optimize", short_help='Train with hyperparameter optimization')
 def optimize():
     study = optuna.create_study(direction='maximize')
-    study.optimize(run_with_suggested_settings, n_trials=200)
+    study.optimize(run_with_suggested_settings, n_trials=200, gc_after_trial=True, n_jobs=1)
 
 
 def run_with_suggested_settings(trial):
@@ -53,7 +52,7 @@ def run_with_suggested_settings(trial):
     settings.buffer_size = trial.suggest_int('buffer_size', 1e5, 1e8)
     settings.alpha = trial.suggest_float('alpha', float(0), float(1))
     settings.beta = trial.suggest_float('beta', float(0), float(1))
-    settings.noise_std = trial.v('noise_std', float(0), float(1))
+    settings.noise_std = trial.suggest_float('noise_std', float(0), float(1))
 
     return objective(log=True)
 
@@ -92,9 +91,10 @@ def objective(log: bool = True):
 
         episode_score = np.mean(scores[-100:])
 
-        print(
-            f"Ep: {episode} | Score: {score:.2f} | Max: {np.max(scores):.2f} "
-            f"| Avg: {episode_score:.4f}")
+        if episode % 1 == 0:
+            print(
+                f"Ep: {episode} | Score: {score:.2f} | Max: {np.max(scores):.2f} "
+                f"| Avg: {episode_score:.4f}")
 
         if episode_score > best_average:
             best_average = episode_score
@@ -111,7 +111,6 @@ def objective(log: bool = True):
 
 def setup_environment(read_saved_model=False, no_graphics=True):
     env = UnityEnvironment(file_name=settings.unity_env_location, no_graphics=no_graphics)
-
     brain_name = env.brain_names[0]
     brain = env.brains[brain_name]
 

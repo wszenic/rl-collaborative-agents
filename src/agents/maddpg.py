@@ -60,10 +60,9 @@ class MADDPGAgent:
 
             target_actions = agent.pick_actions(env_data.next_state)
 
-            y = env_data.reward + settings.gamma * self.critic_target(
+            y = torch.Tensor(env_data.reward).view(-1, 1) + torch.Tensor([settings.gamma]) * self.critic_target(
                 env_data.next_state, target_actions
-            ).detach().numpy() * (1 - env_data.done)
-            y = torch.Tensor(y)
+            ) * torch.Tensor([1 - env_data.done]).view(-1, 1)
 
             # critic
             critic_value = self.critic_local(env_data.state, env_data.action)
