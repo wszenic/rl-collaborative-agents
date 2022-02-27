@@ -1,16 +1,15 @@
 import logging
 import os
-import time
 
 import click
 import neptune.new as neptune
 import numpy as np
+import optuna
+from optuna import trial
 from unityagents import UnityEnvironment
 
 from src.agents.maddpg import MADDPGAgent
-from src.config import MAX_EPOCH, GAMMA, TAU, BATCH_SIZE, ACTOR_LEARNING_RATE, \
-    CRITIC_LEARNING_RATE, CHECKPOINT_EVERY, ACTOR_SIZE_1, CRITIC_SIZE_2, CRITIC_SIZE_1, ACTOR_SIZE_2, \
-    UNITY_ENV_LOCATION, EPOCHS_WITH_NOISE, BUFFER_SIZE, ALPHA, BETA, NOISE_STD, UPDATE_FREQ
+from src.config.config import settings
 from src.structs import EnvFeedback
 
 
@@ -32,6 +31,33 @@ def evaluate():
     env.close()
 
 
+@run.command("optimize", short_help='Train with hyperparameter optimization')
+def optimize():
+    study = optuna.create_study(direction='maximize')
+    study.optimize(run_with_suggested_settings, n_trials=200)
+
+
+def run_with_suggested_settings(trial):
+    global settings
+    settings.epochs_with_noise = trial.suggest_int('epochs_with_noise', 0, 1000)
+    settings.actor_learning_rate = trial.suggest_loguniform('actor_learning_rate', 1e-6, 1e-1)
+    settings.critic_learning_rate = trial.suggest_loguniform('critic_learning_rate', 1e-6, 1e-1)
+    settings.gamma = trial.suggest_float('gamma', 0.5, 0.9999)
+    settings.tau = trial.suggest_loguniform('tau', 1e-5, 1e-1)
+    settings.update_freq = trial.suggest_int('update_freq', 0, 500)
+    settings.actor_size_1 = trial.suggest_int('actor_size_1', 64, 1024)
+    settings.actor_size_2 = trial.suggest_int('actor_size_2', 64, 1024)
+    settings.critic_size_1 = trial.suggest_int('critic_size_1', 64, 1024)
+    settings.critic_size_2 = trial.suggest_int('critic_size_2', 64, 1024)
+    settings.batch_size = trial.suggest_int('batch_size', 12, 2048)
+    settings.buffer_size = trial.suggest_int('buffer_size', 1e5, 1e8)
+    settings.alpha = trial.suggest_float('alpha', float(0), float(1))
+    settings.beta = trial.suggest_float('beta', float(0), float(1))
+    settings.noise_std = trial.v('noise_std', float(0), float(1))
+
+    return objective(log=True)
+
+
 @run.command("train", short_help="Train the reinforcement learning model")
 @click.option(
     "-l",
@@ -40,15 +66,20 @@ def evaluate():
     required=False
 )
 def train(log: bool):
-    env, multi_agent, scores, brain_name = setup_environment()
+    best_score = objective(log)
+    print(f"Best score = {best_score}")
+
+
+def objective(log: bool = True):
+    best_average = 0
+    env, multi_agent, scores, brain_name = setup_environment(read_saved_model=False, no_graphics=True)
     use_noise = True
     if log:
         neptune_log = log_to_neptune()
 
-    for episode in range(MAX_EPOCH):
-        if episode > EPOCHS_WITH_NOISE:
+    for episode in range(settings.max_epoch):
+        if episode > settings.epochs_with_noise:
             use_noise = False
-        episode_start_time = time.time()
         env_info = env.reset(train_mode=True)[brain_name]
         multi_agent.reset()
         start_state = env_info.vector_observations
@@ -58,12 +89,16 @@ def train(log: bool):
             neptune_log['best_average'].log(np.mean(scores[-100:]))
             neptune_log['score'].log(score)
         scores.append(score)
-        episode_time = time.time() - episode_start_time
+
+        episode_score = np.mean(scores[-100:])
+
         print(
             f"Ep: {episode} | Score: {score:.2f} | Max: {np.max(scores):.2f} "
-            f"| Avg: {np.mean(scores[-100:]):.4f} | Time: {episode_time:.4f}")
+            f"| Avg: {episode_score:.4f}")
 
-        if episode % CHECKPOINT_EVERY == 0:
+        if episode_score > best_average:
+            best_average = episode_score
+        if episode % settings.checkpoint_every == 0:
             multi_agent.save()
 
     if log:
@@ -71,9 +106,11 @@ def train(log: bool):
     multi_agent.save()
     env.close()
 
+    return best_average
+
 
 def setup_environment(read_saved_model=False, no_graphics=True):
-    env = UnityEnvironment(file_name=UNITY_ENV_LOCATION, no_graphics=no_graphics)
+    env = UnityEnvironment(file_name=settings.unity_env_location, no_graphics=no_graphics)
 
     brain_name = env.brain_names[0]
     brain = env.brains[brain_name]
@@ -91,7 +128,7 @@ def setup_environment(read_saved_model=False, no_graphics=True):
 
 
 def act_during_episode(multi_agent, env, state, brain_name, use_noise):
-    score = 0
+    score = []
     while True:
         action = multi_agent.act(state, use_noise)
 
@@ -102,11 +139,11 @@ def act_during_episode(multi_agent, env, state, brain_name, use_noise):
 
         multi_agent.step(env_response)
 
-        score += np.max([env_response.reward, env_response.reward])
+        score += [env_response.reward]
         state = env_response.next_state
         if any(env_response.done):
             break
-    return score
+    return np.max(np.sum(np.array(score), axis=0))
 
 
 def log_to_neptune():
@@ -116,21 +153,21 @@ def log_to_neptune():
     )
 
     neptune_run['parameters'] = {
-        'ACTOR_LEARNING_RATE': ACTOR_LEARNING_RATE,
-        'CRITIC_LEARNING_RATE': CRITIC_LEARNING_RATE,
-        'GAMMA': GAMMA,
-        'TAU': TAU,
-        'BATCH_SIZE': BATCH_SIZE,
-        'ACTOR_MID_1': ACTOR_SIZE_1,
-        'ACTOR_MID_2': ACTOR_SIZE_2,
-        'CRITIC_CONCAT_1': CRITIC_SIZE_1,
-        'CRITIC_CONCAT_2': CRITIC_SIZE_2,
-        'EPOCHS_WITH_NOISE': EPOCHS_WITH_NOISE,
-        'BUFFER_SIZE': BUFFER_SIZE,
-        'ALPHA': ALPHA,
-        'BETA': BETA,
-        'NOISE_STD': NOISE_STD,
-        'UPDATE_FREQ': UPDATE_FREQ
+        'ACTOR_LEARNING_RATE': settings.actor_learning_rate,
+        'CRITIC_LEARNING_RATE': settings.critic_learning_rate,
+        'GAMMA': settings.gamma,
+        'TAU': settings.tau,
+        'BATCH_SIZE': settings.batch_size,
+        'ACTOR_MID_1': settings.actor_size_1,
+        'ACTOR_MID_2': settings.actor_size_2,
+        'CRITIC_CONCAT_1': settings.critic_size_1,
+        'CRITIC_CONCAT_2': settings.critic_size_2,
+        'EPOCHS_WITH_NOISE': settings.epochs_with_noise,
+        'BUFFER_SIZE': settings.buffer_size,
+        'ALPHA': settings.alpha,
+        'BETA': settings.beta,
+        'NOISE_STD': settings.noise_std,
+        'UPDATE_FREQ': settings.update_freq
     }
     return neptune_run
 

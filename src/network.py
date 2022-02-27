@@ -1,9 +1,9 @@
 import numpy as np
 import torch
 import torch.nn as nn
+from loguru import logger
 
-from src.config import ACTOR_SIZE_1, ACTOR_SIZE_2, CRITIC_SIZE_2, \
-    CRITIC_SIZE_1
+from src.config.config import settings
 
 
 def init_hidden_layers(layer):
@@ -18,13 +18,13 @@ class ActorNet(nn.Module):
         super().__init__()
 
         # self.bn_1 = nn.BatchNorm1d(state_size)
-        self.lin_1 = nn.Linear(state_size, ACTOR_SIZE_1)
-        self.bn_2 = nn.BatchNorm1d(ACTOR_SIZE_1)
+        self.lin_1 = nn.Linear(state_size, settings.actor_size_1)
+        self.bn_2 = nn.BatchNorm1d(settings.actor_size_1)
         self.relu_1 = nn.ReLU()
-        self.lin_2 = nn.Linear(ACTOR_SIZE_1, ACTOR_SIZE_2)
-        self.bn_3 = nn.BatchNorm1d(ACTOR_SIZE_2)
+        self.lin_2 = nn.Linear(settings.actor_size_1, settings.actor_size_2)
+        self.bn_3 = nn.BatchNorm1d(settings.actor_size_2)
         self.relu_2 = nn.ReLU()
-        self.lin_3 = nn.Linear(ACTOR_SIZE_2, action_size)
+        self.lin_3 = nn.Linear(settings.actor_size_2, action_size)
         self.tanh = nn.Tanh()
 
         self.initialize_params()
@@ -54,13 +54,13 @@ class CriticNet(nn.Module):
         super().__init__()
 
         # self.bn_1 = nn.BatchNorm1d(state_size)
-        self.lin_1 = nn.Linear(state_size, CRITIC_SIZE_1)
-        self.bn_2 = nn.BatchNorm1d(CRITIC_SIZE_1)
+        self.lin_1 = nn.Linear(state_size, settings.critic_size_1)
+        self.bn_2 = nn.BatchNorm1d(settings.critic_size_1)
         self.relu_1 = nn.ReLU()
-        self.lin_2 = nn.Linear(CRITIC_SIZE_1 + action_size, CRITIC_SIZE_2)
+        self.lin_2 = nn.Linear(settings.critic_size_1 + action_size, settings.critic_size_2)
         self.relu_2 = nn.ReLU()
-        self.bn_3 = nn.BatchNorm1d(CRITIC_SIZE_2)
-        self.lin_3 = nn.Linear(CRITIC_SIZE_2, 1)
+        self.bn_3 = nn.BatchNorm1d(settings.critic_size_2)
+        self.lin_3 = nn.Linear(settings.critic_size_2, 1)
 
         self.initialize_params()
 

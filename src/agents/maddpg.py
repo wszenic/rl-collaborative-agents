@@ -2,8 +2,7 @@ import numpy as np
 import torch
 
 from src.agents.ddpg_agent import DDPG, soft_update
-from src.config import N_AGENTS, CRITIC_LEARNING_RATE, ALPHA, UPDATE_FREQ, BATCH_SIZE, BETA, GAMMA, \
-    CHECKPOINT_SAVE_PATH, BUFFER_SIZE
+from src.config.config import settings
 from src.memory.openai import PrioritizedReplayBuffer
 from src.network import CriticNet
 from src.structs import EnvFeedback
@@ -20,14 +19,14 @@ class MADDPGAgent:
         self.critic_target = CriticNet(state_size, action_size).to(device)
         self.critic_target.load_state_dict(self.critic_local.state_dict())
 
-        self.critic_optimizer = torch.optim.Adam(self.critic_local.parameters(), lr=CRITIC_LEARNING_RATE,
+        self.critic_optimizer = torch.optim.Adam(self.critic_local.parameters(), lr=settings.critic_learning_rate,
                                                  weight_decay=0)
 
         self.agents = [
-            DDPG(state_size, action_size, self.critic_local, read_saved_model, agent_id=i) for i in range(N_AGENTS)
+            DDPG(state_size, action_size, self.critic_local, read_saved_model, agent_id=i) for i in range(settings.n_agents)
         ]
 
-        self.memory = PrioritizedReplayBuffer(BUFFER_SIZE, ALPHA)
+        self.memory = PrioritizedReplayBuffer(settings.buffer_size, settings.alpha)
 
         self._step_id = 0  # needed to trigger learning after a couple of steps
 
@@ -42,9 +41,9 @@ class MADDPGAgent:
 
         self._step_id += 1
 
-        if self._step_id % UPDATE_FREQ == 0:
-            if len(self.memory) > BATCH_SIZE:
-                sampled_experience = self.memory.sample(BATCH_SIZE, BETA)
+        if self._step_id % settings.update_freq == 0:
+            if len(self.memory) > settings.batch_size:
+                sampled_experience = self.memory.sample(settings.batch_size, settings.beta)
 
                 self.learn(sampled_experience)
 
@@ -61,7 +60,7 @@ class MADDPGAgent:
 
             target_actions = agent.pick_actions(env_data.next_state)
 
-            y = env_data.reward + GAMMA * self.critic_target(
+            y = env_data.reward + settings.gamma * self.critic_target(
                 env_data.next_state, target_actions
             ).detach().numpy() * (1 - env_data.done)
             y = torch.Tensor(y)
@@ -80,5 +79,5 @@ class MADDPGAgent:
             agent.learn(env_data)
 
     def save(self):
-        [torch.save(agent.actor_network_local.state_dict(), CHECKPOINT_SAVE_PATH.format(agent_id=id)) for id, agent in
+        [torch.save(agent.actor_network_local.state_dict(), settings.checkpoint_save_path.format(agent_id=id)) for id, agent in
          enumerate(self.agents)]

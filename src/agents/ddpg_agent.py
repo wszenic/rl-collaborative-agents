@@ -2,30 +2,30 @@ import numpy as np
 import torch
 from torch import nn
 
-from src.config import TAU, CHECKPOINT_SAVE_PATH, \
-    NOISE_STD, ACTOR_LEARNING_RATE
+from src.config.config import settings
 from src.network import ActorNet
 from src.noise import OUActionNoise
 from src.structs import EnvFeedback
+from loguru import logger
 
 
 def soft_update(local_model, target_model):
     for target_param, local_param in zip(target_model.parameters(), local_model.parameters()):
-        target_param.data.copy_(TAU * local_param.data + (1.0 - TAU) * target_param.data)
+        target_param.data.copy_(settings.tau * local_param.data + (1.0 - settings.tau) * target_param.data)
 
 
 class DDPG:
 
     def __init__(self, state_size: int, action_size: int, critic_network: nn.Module, read_saved_model=False,
                  agent_id=None):
-        self.noise = OUActionNoise(mean=np.zeros(action_size), std_deviation=float(NOISE_STD) * np.ones(action_size))
+        self.noise = OUActionNoise(mean=np.zeros(action_size), std_deviation=float(settings.noise_std) * np.ones(action_size))
 
         device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
-
+        logger.info(f"Device = {device}")
         self.actor_network_local = ActorNet(state_size, action_size).to(device)
         self.actor_network_target = ActorNet(state_size, action_size).to(device)
         self.actor_network_target.load_state_dict(self.actor_network_local.state_dict())
-        self.actor_optimizer = torch.optim.Adam(self.actor_network_local.parameters(), lr=ACTOR_LEARNING_RATE)
+        self.actor_optimizer = torch.optim.Adam(self.actor_network_local.parameters(), lr=settings.actor_learning_rate)
 
         self.critic_network = critic_network  # in maddpg critic is shared across many agents
 
@@ -35,7 +35,7 @@ class DDPG:
         self._step_id = 0
 
     def __load_model(self, agent_id):
-        saved_model = torch.load(CHECKPOINT_SAVE_PATH.format(agent_id=agent_id))
+        saved_model = torch.load(settings.checkpoint_save_path.format(agent_id=agent_id))
         self.actor_network_local.load_state_dict(saved_model)
 
     def act(self, state, use_noise: bool):
